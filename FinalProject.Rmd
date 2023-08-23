@@ -1,0 +1,357 @@
+---
+title: "Analysis of trends in Life Expectancy"
+author: "Aakash Vaithyanathan"
+date: 'December 20, 2022'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE, echo=FALSE}
+# Loading our required libraries
+library(tidyverse)
+library(gridExtra)
+library(ggplot2)
+library(Matrix)
+library(car)
+library(glmnet)
+```
+
+
+```{r, message=FALSE, echo=FALSE}
+# We Load the dataset and remove missing varaibles
+life_exp_org <- read.csv("lifeExpectancyFiltered.csv", header=T)
+# Remove missing variables
+life_exp <- life_exp_org[complete.cases(life_exp_org),]  
+```
+
+# Introduction and EDA
+## Summary of dataset
+```{r, message=FALSE, echo=FALSE}
+summary(life_exp)
+
+```
+## Interpretation from summary of dataset
+We can notice that removing the missing variables (~600) did not change the nature of distribution (as seen from the relatively similar values for the 5 number summaries for each variables) and thus missing values did not affect our dataset negatively.
+
+Next we will perform our Exploratory Data Analysis on the different health factors. The units for the chosen fields can be found in our proposal report.
+
+# Exploratory Data Analysis
+Since our variables in the dataset are of numeric type, we can study any relationship/trends between them using scatter plot. A scatter plot will give us any correlation (if any), the strength between the variables, nature of the correlation (positive/linear),trend behaviour (linear/non-linear) and presence of outliers (if any)
+```{r echo=FALSE, fig.align='center', fig.dim=c(8, 3), message=FALSE, warning=FALSE}
+
+# Plot a table with correlation values wtih life expectancy for each variable
+# cor(life_exp$Life.expectancy, life_exp$BMI)
+
+# Plots
+alc <- ggplot(life_exp)+
+  geom_point(aes(x = Alcohol, y = Life.expectancy, group = 1))+
+  labs(x="Alcohol Consumption")+
+  theme_classic()
+
+bmi <- ggplot(life_exp)+
+  geom_point(aes(x = BMI, y = Life.expectancy, group = 1))+
+  labs(x="BMI")+
+  theme_classic()
+
+hiv.aids <- ggplot(life_exp)+
+  geom_point(aes(x = HIV.AIDS, y = Life.expectancy, group = 1))+
+  labs(x="HIV AIDS")+
+  theme_classic()
+
+mortality <- ggplot(life_exp)+
+  geom_point(aes(x = Adult.Mortality, y = Life.expectancy, group = 1))+
+  labs(x="Adult Mortality")+
+  theme_classic()
+
+total.exp <- ggplot(life_exp)+
+  geom_point(aes(x = Total.expenditure, y = Life.expectancy, group = 1))+
+  labs(x="Total Expenditure")+
+  theme_classic()
+
+
+gdp <- ggplot(life_exp)+
+  geom_point(aes(x = GDP, y = Life.expectancy, group = 1))+
+  labs(x="GDP")+
+  theme_classic()
+
+income.comp <- ggplot(life_exp)+
+  geom_point(aes(x = Income.composition.of.resources, y = Life.expectancy, group = 1))+
+  labs(x="Income Composition of Resources")+
+  theme_classic()
+
+
+schooling <- ggplot(life_exp)+
+  geom_point(aes(x = Schooling, y = Life.expectancy, group = 1))+
+  labs(x="Schooling")+
+  theme_classic()
+
+grid.arrange(alc, bmi, nrow=2, ncol=2,
+             top = "Variation in life expectency as a result of different factors
+             between 2000-2015")
+grid.arrange(hiv.aids, mortality, nrow=2, ncol=2)
+grid.arrange(total.exp, gdp, nrow=2, ncol=2)
+grid.arrange(schooling, income.comp,nrow=2, ncol=2)  
+
+cor(life_exp$Life.expectancy, life_exp$BMI)
+```
+From the above plots, we can see strong positive correlation with life expectancy for variables: Schooling, Income composition of resources and BMI. We notice a negative correlation for variables: HIV-AIDS, adult mortality
+
+Let us look at the correlation between the variables HIV-AIDS, Schooling, Income Composition, Adult Mortality and BMI in the following order:
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+cor(life_exp$Life.expectancy, life_exp$HIV.AIDS)
+cor(life_exp$Life.expectancy, life_exp$Schooling)
+cor(life_exp$Life.expectancy, life_exp$Income.composition.of.resources)
+cor(life_exp$Life.expectancy, life_exp$Adult.Mortality)
+cor(life_exp$Life.expectancy, life_exp$BMI)
+```
+
+
+Out of the 8 predictor variables in our dataset, we will select "Schooling, Income composition of resources, BMI, HIV-AIDS and Adult Mortaltiy" as our chosen 5 predictor variables of interest.
+
+# Checking Assumptions of Simple Linear Regression
+## QQ-Plot and Residual plot for Schooling and Life Expectancy
+
+```{r, message=FALSE, echo=FALSE}
+# QQ-Plot and Residual plot for Schooling and Life Expectancy
+# 1. QQ-Plot
+QQ_schooling <- life_exp %>%
+  ggplot(aes(sample = Schooling)) + 
+  geom_qq() +
+  geom_qq_line() + # points the line indicating if straight line then our quantiles are normal.
+  labs(x = "N(0, 1) Quantiles",
+       y = "Schooling Quantiles", 
+       title = "Normal QQ-Plot",
+       subtitle = "Data: Schooling data points from 2000-2015")
+# 2. Residual Plot
+schoolingMod <- lm(life_exp$Life.expectancy ~ life_exp$Schooling)
+schoolingResidual <- qplot(x=fitted.values((schoolingMod)), y=residuals(schoolingMod),xlab = "Fitted Schooling Values", ylab = "Error") +   geom_smooth(method = "lm", se=F) + ggtitle("Residual plot between Life Expectancy and Schooling")
+
+
+grid.arrange(QQ_schooling, schoolingResidual,nrow=2, ncol=1)  
+
+```
+
+## QQ-Plot and Residual plot for Income Composition and Life Expectancy
+
+```{r, message=FALSE, echo=FALSE}
+# QQ-Plot and Residual plot for Income Composition and Life Expectancy
+# 1. QQ-Plot
+QQ_incomeComp <- life_exp %>%
+  ggplot(aes(sample = Income.composition.of.resources)) + 
+  geom_qq() +
+  geom_qq_line() + # points the line indicating if straight line then our quantiles are normal.
+  labs(x = "N(0, 1) Quantiles",
+       y = "Income Composition Quantiles", 
+       title = "Normal QQ-Plot",
+       subtitle = "Data: Income Composition data points from 2000-2015")
+# 2. Residual Plot
+incomeCompMod <- lm(life_exp$Life.expectancy ~ life_exp$Income.composition.of.resources)
+
+incomeCompResidual <- qplot(x=fitted.values((incomeCompMod)), y=residuals(incomeCompMod),xlab = "Fitted Income Composition Values", ylab = "Error") +   geom_smooth(method = "lm", se=F) + ggtitle("Residual plot between Life Expectancy and Income Composition")
+
+
+grid.arrange(QQ_incomeComp, incomeCompResidual,nrow=2, ncol=1)  
+
+```
+
+## QQ-Plot and Residual plot for BMI and Life Expectancy
+
+```{r, message=FALSE, echo=FALSE}
+# QQ-Plot and Residual plot for BMI and Life Expectancy
+# 1. QQ-Plot
+QQ_BMI <- life_exp %>%
+  ggplot(aes(sample = BMI)) + 
+  geom_qq() +
+  geom_qq_line() + # points the line indicating if straight line then our quantiles are normal.
+  labs(x = "N(0, 1) Quantiles",
+       y = "BMI Quantiles", 
+       title = "Normal QQ-Plot",
+       subtitle = "Data: BMI data points from 2000-2015")
+# 2. Residual Plot
+BMIMod <- lm(life_exp$Life.expectancy ~ life_exp$BMI)
+
+BMIResidual <- qplot(x=fitted.values((BMIMod)), y=residuals(BMIMod),xlab = "Fitted BMI Values", ylab = "Error") +   geom_smooth(method = "lm", se=F) + ggtitle("Residual plot between Life Expectancy and BMI")
+
+
+grid.arrange(QQ_BMI, BMIResidual,nrow=2, ncol=1)  
+
+```
+
+## QQ-Plot and Residual plot for HIV-AIDS and Life Expectancy
+
+```{r,message=FALSE, echo=FALSE}
+# QQ-Plot and Residual plot for HIV-AIDS and Life Expectancy
+# 1. QQ-Plot
+QQ_HIV <- life_exp %>%
+  ggplot(aes(sample = HIV.AIDS)) + 
+  geom_qq() +
+  geom_qq_line() + # points the line indicating if straight line then our quantiles are normal.
+  labs(x = "N(0, 1) Quantiles",
+       y = "HIV-AIDS Quantiles", 
+       title = "Normal QQ-Plot",
+       subtitle = "Data: HIV-AIDS data points from 2000-2015")
+# 2. Residual Plot
+HIVMod <- lm(life_exp$Life.expectancy ~ life_exp$HIV.AIDS)
+
+HIVResidual <- qplot(x=fitted.values((HIVMod)), y=residuals(HIVMod),xlab = "Fitted HIV-AIDS Values", ylab = "Error") +   geom_smooth(method = "lm", se=F) + ggtitle("Residual plot between Life Expectancy and HIV-AIDS")
+
+
+grid.arrange(QQ_HIV, HIVResidual,nrow=2, ncol=1)  
+
+```
+
+## QQ-Plot and Residual plot for Adult Mortality and Life Expectancy
+
+```{r, message=FALSE, echo=FALSE}
+# QQ-Plot and Residual plot for Adult Mortality and Life Expectancy
+# 1. QQ-Plot
+QQ_Mortality <- life_exp %>%
+  ggplot(aes(sample = Adult.Mortality)) + 
+  geom_qq() +
+  geom_qq_line() + # points the line indicating if straight line then our quantiles are normal.
+  labs(x = "N(0, 1) Quantiles",
+       y = "Adult Mortality Quantiles", 
+       title = "Normal QQ-Plot",
+       subtitle = "Data: Adult Mortality data points from 2000-2015")
+# 2. Residual Plot
+MortalityMod <- lm(life_exp$Life.expectancy ~ life_exp$Adult.Mortality)
+
+MortalityResidual <- qplot(x=fitted.values((MortalityMod)), y=residuals(MortalityMod),xlab = "Fitted Adult Mortaltiy Values", ylab = "Error") +   geom_smooth(method = "lm", se=F) + ggtitle("Residual plot between Life Expectancy and Adult Mortality")
+
+
+grid.arrange(QQ_Mortality, MortalityResidual,nrow=2, ncol=1)
+```
+
+We will now begin with the rigorous analysis of our models.
+
+# Checking for Multicollinearity using VIF 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+life_exp_model <- lm(life_exp$Life.expectancy ~ life_exp$Schooling + life_exp$Income.composition.of.resources + life_exp$BMI + life_exp$HIV.AIDS + life_exp$Adult.Mortality, data = life_exp)
+
+summary(life_exp_model)
+vif(life_exp_model) # taken from car package
+```
+Since the VIF for each of our chosen variable is < 5, we can conclude our proposed model has no multicollinearity among the variables.
+
+## Performing variable selection and cross validation
+```{r}
+life_exp_reduced <- life_exp[,-c(1)]
+model.lm <- lm(Life.expectancy ~ ., data = life_exp_reduced)
+# Direction = both means we do forward and backward i.e stepwise selection
+sel.var.aic <- step(model.lm, trace = 0, k = 2, direction = "both") # Use k = 2 for AIC
+select_var_aic<-attr(terms(sel.var.aic), "term.labels") 
+# Use attr() to know which variables were selected after step() operation
+select_var_aic
+
+n <- nrow(life_exp_reduced)
+sel.var.bic <- step(model.lm, trace = 0, k = log(n), direction = "both") # For bic, k = log(n)
+select_var_bic<-attr(terms(sel.var.bic), "term.labels")    
+# Use attr() to know which variables were selected after step() operation
+select_var_bic
+
+# LASSO BASED VARIABLE SELECTION WITH CROSS VALIDATION
+
+set.seed(1122334455)
+cv.out <- cv.glmnet(x = as.matrix(life_exp_reduced[,2:9]), y = life_exp_reduced$Life.expectancy, standardize = T, alpha = 1)
+plot(cv.out)
+# From plot, use 2nd bar line as reference and see which variable to select (the number on top tells how many variables where chosen) as the Mean Sqiared Error is still usable and low
+best.lambda <- cv.out$lambda.1se
+best.lambda
+co<-coef(cv.out, s = "lambda.1se")
+# In result if you see . it means the variable was not select (intercept not selected). 
+# As long as you have a + or - value, it means the variable was chosen.
+#Selection of the significant features(predictors)
+
+## threshold for variable selection ##
+
+thresh <- 0.00 # Convention is 0 but if you get a lot of variables still, you can use higher thresholds like 0.05 or higher depending on how many variables you get each time
+# select variables #
+inds<-which(abs(co) > thresh )
+variables<-row.names(co)[inds]
+sel.var.lasso<-variables[!(variables %in% '(Intercept)')]
+sel.var.lasso
+
+```
+From the AIC and BIC step-wise variable selection and Lasso variable selection with cross-validation to determine the best lambda, we conclude that our dataset accepts our chosen variables as appropriate for the model and thus our proposed model with "Schooling, Income composition of resources, BMI, HIV-AIDS and Adult Mortaltiy" are 5 acceptable parameters to determine life expectancy.
+
+## Model assumptions
+
+Next, we will check for the assumptions of multiple linear regression on our proposed model
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# 1. Normal QQ-Plot of model
+plot(x=life_exp_model, which=2, col="black", ann=FALSE, sub="", axes=FALSE, caption = "NA") +
+box(col="black"); axis(1, col="black", col.ticks="black"); axis(2, col="black", col.ticks="black") +
+title(xlab = 'Predictors', ylab = 'Standardized Residuals', main="Normality of residuals")
+
+
+# 2. Residual Plot of model
+
+qplot(x=fitted.values((life_exp_model)), y=residuals(life_exp_model),xlab = "Fitted predictor(s) Values", ylab = "Error") +   geom_smooth(method = "lm", se=F) + ggtitle("Residual plot between Life Expectancy and chosen predictor variables")
+
+
+```
+
+We can see from the normal QQ Plot and Residuals vs Fitted plot that we have satisfied the assumptions for Multiple linear regression for our model.
+
+
+## Checking for leverage and Influential points
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# We can check for influential points if any using the Residuals vs Leverage plot
+# This plot checks with respect to cooks distance and determine graphically if any point
+# is an influential point or not. If it isn't the point is not a bad leverage point and can
+# be kept in our dataset.
+
+plot(x=life_exp_model, which=5, col="black", ann=FALSE, sub="", axes=FALSE, caption = "NA", labels.id = "NULL")
+box(col="black"); axis(1, col="black", col.ticks="black"); axis(2, col="black", col.ticks="black")
+title(xlab = 'Predictors', ylab = 'Standardized Residuals', main="Residuals vs Leverage")
+
+```
+From the above Residuals vs Leverage plot we can see that we have observations that are close
+to the border of Cook's distance acceptable range but don't cross them. We can thus conclude that our model doesn't have any influential observations and thus we do not need to remove any outliers/leverage points and refit the model.
+
+## Partial F-Test
+We will perform the partial f-test to determine if a reduced model is a better fit for answering our question or not. Let us remove the predictors HIV.AIDS and BMI for the hypothesis test. In this test, our Null hypothesis is that coefficients of HIV.AIDS and BMI predictor values are 0. Alternate is either one of them isn't 0. The significance level is 5% = 0.05.
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+reduced.model <- lm(life_exp$Life.expectancy ~ life_exp$Schooling + life_exp$Income.composition.of.resources + life_exp$HIV.AIDS , data = life_exp)
+
+anova(reduced.model, life_exp_model)
+
+```
+From the above test we get conclude that our p-value is significant and thus we cannot reduce the model to remove the predictors BMI and HIV.AIDS. Therefore reduced model is not a better fit than the original model.
+
+## Hypothesis Testing
+In this hypothesis test we test for if the coefficients of different predictors in our chosen model are significant or not. Null hypothesis is that the coefficients of predictors are equal to 0 and alternate hypothesis is that the coefficient for predictors != 0.
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+anova(life_exp_model)
+
+```
+From the anova table we conclude that the coefficients of each of the predictors is significant and we reject the null hypothesis.
+
+## Confidence Interval, Prediction value of Life expectancy and Coefficient of Multiple Determination
+```{r}
+## The 95% Confidence interval ##
+confint(life_exp_model, level = 0.95)
+```
+We get the 95% CI for each of the coefficients/intercept values in our fit model
+
+```{r}
+# We will now calculate the prediction interval for a specific life expectancy value given
+# parameter values for BMI, Adult mortality, Income composition, Schooling and HIV.AIDS
+
+
+newdata <- data.frame(hiv.aids=mean(life_exp$HIV.AIDS), schooling = mean(life_exp$Schooling), income.comp = mean(life_exp$Income.composition.of.resources), bmi = mean(life_exp$BMI), mortality=mean(life_exp$Adult.Mortality))
+
+predicted.life_exp <- predict(life_exp_model, newdata, interval="predict")[1]
+predicted.life_exp
+
+
+# Coefficient of multiple determination
+summary(life_exp_model)$adj.r.squared
+```
+
